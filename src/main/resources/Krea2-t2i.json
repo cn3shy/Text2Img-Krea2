@@ -59,7 +59,7 @@
       "scheduler": "simple",
       "denoise": 1,
       "model": [
-        "73",
+        "72",
         0
       ],
       "positive": [
@@ -86,7 +86,7 @@
     "inputs": {
       "text": "",
       "clip": [
-        "73",
+        "72",
         1
       ]
     },
@@ -116,25 +116,6 @@
       "title": "加载LoRA"
     }
   },
-  "73": {
-    "inputs": {
-      "lora_name": "Krea2\\Krea2_DreamCos_Realism.safetensors",
-      "strength_model": 0.8,
-      "strength_clip": 0.8,
-      "model": [
-        "72",
-        0
-      ],
-      "clip": [
-        "72",
-        1
-      ]
-    },
-    "class_type": "LoraLoader",
-    "_meta": {
-      "title": "加载LoRA"
-    }
-  },
   "75": {
     "inputs": {
       "tile_size": 512,
@@ -157,12 +138,9 @@
   },
   "79": {
     "inputs": {
-      "text": [
-        "84",
-        0
-      ],
+      "text": "",
       "clip": [
-        "73",
+        "72",
         1
       ]
     },
@@ -199,17 +177,6 @@
     "class_type": "ResolutionSelector",
     "_meta": {
       "title": "分辨率选择器"
-    }
-  },
-  "84": {
-    "inputs": {
-      "string_a": " dreamcos style, cosplay photo",
-      "string_b": "18岁年轻女性，站在镜子面前 连体渔网袜\n",
-      "delimiter": ","
-    },
-    "class_type": "StringConcatenate",
-    "_meta": {
-      "title": "连接"
     }
   }
 }

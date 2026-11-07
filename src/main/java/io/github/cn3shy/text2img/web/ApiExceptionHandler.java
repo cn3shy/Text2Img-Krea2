@@ -12,14 +12,17 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * Errors are returned as {@code {"message": "..."}}, the shape the frontend
- * looks for on non-2xx responses.
+ * 全局异常处理。
+ *
+ * <p>所有错误都统一返回 {@code {"message": "..."}}，前端在非 2xx 响应里会读取
+ * message / msg / error / detail 字段并展示。
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
+    /** 业务异常：异常自带 HTTP 状态码（400/503/504）。 */
     @ExceptionHandler(Text2ImgException.class)
     public ResponseEntity<Map<String, String>> handleText2Img(Text2ImgException exception) {
         if (exception.status().is5xxServerError()) {
@@ -29,6 +32,7 @@ public class ApiExceptionHandler {
                 .body(Map.of("message", exception.getMessage()));
     }
 
+    /** 请求体不是合法 JSON，或字段类型对不上。 */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, String>> handleUnreadableBody(HttpMessageNotReadableException exception) {
         log.debug("请求体解析失败", exception);
@@ -36,6 +40,7 @@ public class ApiExceptionHandler {
                 .body(Map.of("message", "请求体不是合法的 JSON"));
     }
 
+    /** 兜底处理：未被上面规则覆盖的异常。 */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleUnexpected(Exception exception) {
         // Spring MVC 自身抛出的异常（405、404、415 等）已经带有正确的状态码，

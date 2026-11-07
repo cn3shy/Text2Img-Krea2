@@ -13,7 +13,7 @@ comfyui:
   # 前端 120 秒超时，后端留出余量
   generation-timeout: ${COMFYUI_GENERATION_TIMEOUT:100s}
   poll-interval: 500ms
-  workflow: ${COMFYUI_WORKFLOW:classpath:Krea2 t2i.json}
+  workflow: ${COMFYUI_WORKFLOW:classpath:Krea2-t2i.json}
 
 app:
   cors:

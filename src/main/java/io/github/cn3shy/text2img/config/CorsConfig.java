@@ -10,12 +10,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
 /**
- * CORS for the {@code /text2img} endpoint.
+ * {@code /text2img} 的跨域配置。
  *
- * <p>Through the Vite/Vercel proxy the browser request is same-origin, so CORS is
- * not involved. This only matters when the frontend calls the backend directly.
- * The default {@code *} lets any dev origin (localhost:5173, :5174, LAN IP, …)
- * work; set {@code CORS_ALLOWED_ORIGINS} to a comma separated list in production.
+ * <p>经 Vite/Vercel 代理访问时浏览器是同源请求，不会触发 CORS；只有前端直连后端时才会用到。
+ * 默认放行所有来源，方便 localhost:5173、5174、局域网 IP 等各种开发环境；
+ * 线上可以通过环境变量 {@code CORS_ALLOWED_ORIGINS} 传逗号分隔的白名单收紧。
  */
 @Configuration
 public class CorsConfig {
