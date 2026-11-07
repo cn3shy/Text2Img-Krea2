@@ -1,0 +1,22 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: text2img
+
+comfyui:
+  # ComfyUI 默认地址；ComfyUI 在 Docker 里时改成 http://host.docker.internal:8188
+  base-url: ${COMFYUI_BASE_URL:http://127.0.0.1:8188}
+  connect-timeout: 5s
+  read-timeout: 60s
+  # 前端 120 秒超时，后端留出余量
+  generation-timeout: ${COMFYUI_GENERATION_TIMEOUT:100s}
+  poll-interval: 500ms
+  workflow: ${COMFYUI_WORKFLOW:classpath:Krea2 t2i.json}
+
+app:
+  cors:
+    # 浏览器直连后端时生效；经 Vite/Vercel 代理时同源，用不到。
+    # 默认允许所有来源（接口不使用 Cookie/凭证）；线上可用 CORS_ALLOWED_ORIGINS 收紧
+    allowed-origins: "${CORS_ALLOWED_ORIGINS:*}"
