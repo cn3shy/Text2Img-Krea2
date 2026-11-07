@@ -11,7 +11,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   <li>{@code base-url}：ComfyUI 地址，默认 {@code http://127.0.0.1:8188}</li>
  *   <li>{@code connect-timeout}：建立连接超时，默认 5 秒</li>
  *   <li>{@code read-timeout}：单次读取响应超时，默认 60 秒</li>
- *   <li>{@code generation-timeout}：整个出图任务的最长等待时间，默认 100 秒（前端是 120 秒）</li>
+ *   <li>{@code generation-timeout}：真正开始执行后的最长等待时间，默认 100 秒</li>
+ *   <li>{@code queue-timeout}：在 ComfyUI 队列里排队的最长时间，默认 5 分钟</li>
  *   <li>{@code poll-interval}：轮询 /history 的间隔，默认 500 毫秒</li>
  *   <li>{@code workflow}：工作流模板位置，默认 {@code classpath:Krea2-t2i.json}</li>
  * </ul>
@@ -24,6 +25,7 @@ public record ComfyUiProperties(
         Duration connectTimeout,
         Duration readTimeout,
         Duration generationTimeout,
+        Duration queueTimeout,
         Duration pollInterval,
         String workflow) {
 
@@ -35,6 +37,7 @@ public record ComfyUiProperties(
         connectTimeout = defaultDuration(connectTimeout, Duration.ofSeconds(5));
         readTimeout = defaultDuration(readTimeout, Duration.ofSeconds(60));
         generationTimeout = defaultDuration(generationTimeout, Duration.ofSeconds(100));
+        queueTimeout = defaultDuration(queueTimeout, Duration.ofMinutes(5));
         pollInterval = defaultDuration(pollInterval, Duration.ofMillis(500));
         // 轮询间隔太小会把 ComfyUI 打满，兜底限制为至少 10ms
         if (pollInterval.compareTo(Duration.ofMillis(10)) < 0) {

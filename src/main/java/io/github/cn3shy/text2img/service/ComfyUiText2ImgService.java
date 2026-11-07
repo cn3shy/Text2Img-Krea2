@@ -5,6 +5,8 @@ import io.github.cn3shy.text2img.error.GenerationTimeoutException;
 import io.github.cn3shy.text2img.error.UpstreamException;
 import io.github.cn3shy.text2img.web.Text2ImgRequest;
 import io.github.cn3shy.text2img.workflow.WorkflowBuilder;
+import java.util.HashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -65,14 +67,11 @@ public class ComfyUiText2ImgService implements Text2ImgService {
         GenerationRequest generation = RequestValidator.validate(request);
         long startedAt = System.nanoTime();
 
-        // 2. 从模板生成该请求专属的 workflow（prompt、尺寸、随机 seed）
-        ObjectNode workflow = workflowBuilder.build(generation.prompt(), generation.width(), generation.height());
-
-        // 3. 提交任务 → 等待完成 → 下载图片
-        String promptId = submit(workflow);
+        // 2. 组装 workflow → 提交任务 → 等待完成 → 下载图片
+        PreparedWorkflow prepared = prepare(generation);
+        String promptId = submit(prepared, CLIENT_ID);
         JsonNode historyEntry = awaitCompletion(promptId, startedAt);
-        ImageReference image = findImage(historyEntry);
-        byte[] png = download(image);
+        byte[] png = downloadImage(historyEntry);
 
         log.info("ComfyUI 生成完成 promptId={} size={}x{} bytes={} elapsedMs={}",
                 promptId, generation.width(), generation.height(), png.length,
@@ -80,12 +79,26 @@ public class ComfyUiText2ImgService implements Text2ImgService {
         return png;
     }
 
+    /**
+     * 组装本次请求专属的 workflow，并生成节点 id → 阶段文案的映射。
+     * 不访问网络，可以在请求线程里安全调用。
+     */
+    public PreparedWorkflow prepare(GenerationRequest generation) {
+        ObjectNode workflow = workflowBuilder.build(generation.prompt(), generation.width(), generation.height());
+        return new PreparedWorkflow(workflow, stageLabels(workflow));
+    }
+
+    /** 提交准备好的 workflow 到 ComfyUI，返回 prompt_id。clientId 用于对应 WebSocket 进度事件。 */
+    public String submit(PreparedWorkflow prepared, String clientId) {
+        return submitWorkflow(prepared.workflow(), clientId);
+    }
+
     /** 提交 workflow 到 ComfyUI，返回任务的 prompt_id。 */
-    private String submit(ObjectNode workflow) {
+    private String submitWorkflow(ObjectNode workflow, String clientId) {
         // ComfyUI 的 /prompt 接口要求 body 形如 {"prompt": {...}, "client_id": "..."}
         ObjectNode payload = mapper.createObjectNode();
         payload.set("prompt", workflow);
-        payload.put("client_id", CLIENT_ID);
+        payload.put("client_id", clientId);
         String body = mapper.writeValueAsString(payload);
 
         String response;
@@ -138,8 +151,8 @@ public class ComfyUiText2ImgService implements Text2ImgService {
         throw new GenerationTimeoutException("生成超时，请稍后重试");
     }
 
-    /** 查询一次任务历史。 */
-    private JsonNode fetchHistory(String promptId) {
+    /** 查询一次任务历史；任务还没结束时返回的 JSON 里没有对应 promptId 的条目。 */
+    public JsonNode fetchHistory(String promptId) {
         String body;
         try {
             body = comfyUiRestClient.get()
@@ -204,6 +217,70 @@ public class ComfyUiText2ImgService implements Text2ImgService {
         } catch (RestClientException e) {
             throw new UpstreamException("ComfyUI 生成服务不可用，请稍后重试", e);
         }
+    }
+
+    /** 从 history 条目里找图并下载 PNG。 */
+    public byte[] downloadImage(JsonNode historyEntry) {
+        return download(findImage(historyEntry));
+    }
+
+    /**
+     * 任务是否已经在 ComfyUI 里真正开始执行（而不是还在队列里等待）。
+     *
+     * <p>查询失败时返回 false，让调用方按「尚未开始」处理；排队超时最终会兜底。
+     */
+    public boolean isRunning(String promptId) {
+        String body;
+        try {
+            body = comfyUiRestClient.get()
+                    .uri("/queue")
+                    .retrieve()
+                    .body(String.class);
+        } catch (RestClientException e) {
+            return false;
+        }
+        return isPromptRunning(mapper.readTree(body), promptId);
+    }
+
+    /** ComfyUI /queue 的 queue_running 条目是数组，prompt_id 在下标 1。 */
+    static boolean isPromptRunning(JsonNode queue, String promptId) {
+        for (JsonNode item : queue.path("queue_running")) {
+            if (promptId.equals(item.path(1).asString(""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 把 workflow 里的节点 id 映射成进度阶段文案；未知节点不加入。 */
+    private static Map<String, String> stageLabels(ObjectNode workflow) {
+        Map<String, String> labels = new HashMap<>();
+        for (Map.Entry<String, JsonNode> entry : workflow.properties()) {
+            String label = stageLabel(entry.getValue().path("class_type").asString(""));
+            if (label != null) {
+                labels.put(entry.getKey(), label);
+            }
+        }
+        return labels;
+    }
+
+    private static String stageLabel(String classType) {
+        if (classType.startsWith("KSampler")) {
+            return "采样中";
+        }
+        if (classType.startsWith("VAEDecode")) {
+            return "解码图像";
+        }
+        if ("SaveImage".equals(classType)) {
+            return "保存图像";
+        }
+        if (classType.endsWith("Loader")) {
+            return "加载模型";
+        }
+        if ("CLIPTextEncode".equals(classType)) {
+            return "编码提示词";
+        }
+        return null;
     }
 
     /** 两次轮询之间短暂休眠；被中断时恢复中断标记并结束请求。 */
