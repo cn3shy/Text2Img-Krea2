@@ -22,6 +22,7 @@ public class Text2imgApplication {
     public static void main(String[] args) {
         SpringApplication.run(Text2imgApplication.class, args);
         // Spring Boot 自身会打印启动日志，这里再留一行方便确认进程已经就绪
-        log.info("text2img 后端启动完成，接口: POST http://localhost:8090/text2img");
+        log.info("text2img 后端启动完成，接口: POST /text2img/jobs, GET /text2img/jobs/{jobId}, "
+                + "GET /text2img/jobs/{jobId}/image");
     }
 }
