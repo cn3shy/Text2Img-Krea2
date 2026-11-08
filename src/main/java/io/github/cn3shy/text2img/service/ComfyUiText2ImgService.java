@@ -66,6 +66,8 @@ public class ComfyUiText2ImgService implements Text2ImgService {
         // 1. 校验参数：prompt 必填且最多 1200 字符，尺寸缺省 1024x1024
         GenerationRequest generation = RequestValidator.validate(request);
         long startedAt = System.nanoTime();
+        log.info("同步生图请求 size={}x{} prompt={}",
+                generation.width(), generation.height(), generation.prompt());
 
         // 2. 组装 workflow → 提交任务 → 等待完成 → 下载图片
         PreparedWorkflow prepared = prepare(generation);

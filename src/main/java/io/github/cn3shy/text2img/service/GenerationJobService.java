@@ -68,6 +68,8 @@ public class GenerationJobService {
             capacity.release();
             throw e;
         }
+        log.info("生图任务受理 jobId={} size={}x{} prompt={}",
+                job.id(), generation.width(), generation.height(), generation.prompt());
 
         ComfyUiProgressListener listener = null;
         try {
@@ -76,6 +78,7 @@ public class GenerationJobService {
                     prepared.nodeStages(), mapper);
             String promptId = comfyUi.submit(prepared, job.id());
             job.setPromptId(promptId);
+            log.info("已提交 ComfyUI 任务 jobId={} promptId={}", job.id(), promptId);
 
             ComfyUiProgressListener workerListener = listener;
             executor.execute(() -> run(job, workerListener));
@@ -128,7 +131,10 @@ public class GenerationJobService {
                 }
 
                 if (job.executedAtMillis() == 0 && comfyUi.isRunning(promptId)) {
-                    job.markExecutedNow();
+                    if (job.markExecutedNow()) {
+                        log.info("生图任务开始执行 jobId={} promptId={} queueMs={}",
+                                job.id(), promptId, job.executedAtMillis() - job.submittedAtMillis());
+                    }
                 }
 
                 long now = System.currentTimeMillis();
@@ -143,11 +149,13 @@ public class GenerationJobService {
                 sleepBeforeNextPoll();
             }
         } catch (Text2ImgException e) {
+            log.warn("异步生图失败 jobId={} stage={} progress={} message={}",
+                    job.id(), job.stage(), job.progress(), e.getMessage());
             job.fail(e.getMessage());
-            log.warn("异步生图失败 jobId={} message={}", job.id(), e.getMessage());
         } catch (RuntimeException e) {
+            log.error("异步生图异常 jobId={} stage={} progress={}",
+                    job.id(), job.stage(), job.progress(), e);
             job.fail("服务器内部错误，请稍后重试");
-            log.error("异步生图异常 jobId={}", job.id(), e);
         } finally {
             listener.close();
             capacity.release();

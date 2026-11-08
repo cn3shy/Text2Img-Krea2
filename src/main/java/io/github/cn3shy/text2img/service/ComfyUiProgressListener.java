@@ -24,11 +24,15 @@ public final class ComfyUiProgressListener implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(ComfyUiProgressListener.class);
     private static final String DEFAULT_PROGRESS_STAGE = "采样中";
+    /** 进度每跨过这么多百分比才打一行日志，避免每个采样步都刷屏。 */
+    private static final int PROGRESS_LOG_STEP = 10;
 
     private final GenerationJob job;
     private final Map<String, String> nodeStages;
     private final ObjectMapper mapper;
     private volatile WebSocket socket;
+    private int lastLoggedProgress = -1;
+    private String lastLoggedStage;
 
     ComfyUiProgressListener(GenerationJob job, Map<String, String> nodeStages, ObjectMapper mapper) {
         this.job = job;
@@ -76,6 +80,7 @@ public final class ComfyUiProgressListener implements AutoCloseable {
                 case "execution_start" -> {
                     job.markExecutedNow();
                     job.setStage("开始生成");
+                    logStage("开始生成");
                 }
                 case "executing" -> {
                     // execution_start 可能早于连接建立，这里也认一次，只接受第一次写入
@@ -83,10 +88,12 @@ public final class ComfyUiProgressListener implements AutoCloseable {
                     String node = textOf(data.path("node"));
                     if (node.isEmpty()) {
                         job.setStage("收尾中");
+                        logStage("收尾中");
                     } else {
                         String label = nodeStages.get(node);
                         if (label != null) {
                             job.setStage(label);
+                            logStage(label);
                         }
                     }
                 }
@@ -94,10 +101,12 @@ public final class ComfyUiProgressListener implements AutoCloseable {
                     int value = data.path("value").asInt();
                     int max = data.path("max").asInt();
                     if (max > 0) {
-                        job.setProgress(Math.min(100, Math.round(value * 100f / max)));
+                        int percent = Math.min(100, Math.round(value * 100f / max));
+                        job.setProgress(percent);
                         String label = nodeStages.getOrDefault(textOf(data.path("node")),
                                 DEFAULT_PROGRESS_STAGE);
                         job.setStage(label + " " + value + "/" + max);
+                        logProgress(percent);
                     }
                 }
                 default -> {
@@ -106,6 +115,22 @@ public final class ComfyUiProgressListener implements AutoCloseable {
             }
         } catch (RuntimeException e) {
             log.debug("无法解析 ComfyUI 进度消息: {}", text, e);
+        }
+    }
+
+    /** 阶段切换时打一行日志；progress 事件里的 "采样中 3/8" 这类计数不参与比较。 */
+    private void logStage(String stage) {
+        if (!stage.equals(lastLoggedStage)) {
+            lastLoggedStage = stage;
+            log.info("生图进度 jobId={} stage={}", job.id(), stage);
+        }
+    }
+
+    /** 进度每跨过 {@value #PROGRESS_LOG_STEP}% 打一行，完整进度仍通过状态接口展示。 */
+    private void logProgress(int percent) {
+        if (lastLoggedProgress < 0 || percent - lastLoggedProgress >= PROGRESS_LOG_STEP) {
+            lastLoggedProgress = percent;
+            log.info("生图进度 jobId={} progress={}% stage={}", job.id(), percent, job.stage());
         }
     }
 
