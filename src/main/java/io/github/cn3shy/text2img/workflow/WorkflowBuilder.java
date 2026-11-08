@@ -17,11 +17,14 @@ import tools.jackson.databind.node.ObjectNode;
  * <p>模板在启动时读入内存（字节数组），每次请求重新解析一份，互不影响，线程安全。
  * 需要动态替换的节点：
  * <ul>
- *   <li>{@code 79}（CLIPTextEncode）：用户 prompt 直接写入 {@code text}；</li>
+ *   <li>{@code 84}（StringConcatenate）：用户 prompt 写入 {@code string_b}，
+ *       {@code string_a} 保留模板里的风格前缀；拼接结果由 79 号 CLIPTextEncode 编码；</li>
  *   <li>{@code 81}（EmptySD3LatentImage）：写入精确的 {@code width}/{@code height}；</li>
  *   <li>{@code 70}（KSampler）：每次随机 seed，避免重复出图；</li>
  *   <li>{@code 83}（ResolutionSelector）：被 81 覆盖后不再需要，直接删除。</li>
  * </ul>
+ *
+ * <p>负向提示词不需要：KSampler 的 {@code cfg} 为 1，71 号 CLIPTextEncode 保持空文本即可。
  *
  * <p>类上标了 {@code @Component}，由 Spring 组件扫描创建；类里只有一个构造器，
  * Spring 4.3+ 会自动完成参数注入，所以不需要写 {@code @Autowired}。
@@ -29,7 +32,9 @@ import tools.jackson.databind.node.ObjectNode;
 @Component
 public class WorkflowBuilder {
 
-    private static final String POSITIVE_PROMPT_NODE = "79";
+    /** 正向提示词拼接节点；用户输入写入它的 string_b。 */
+    private static final String PROMPT_NODE = "84";
+    private static final String PROMPT_INPUT = "string_b";
     private static final String LATENT_NODE = "81";
     private static final String SAMPLER_NODE = "70";
     private static final String RESOLUTION_SELECTOR_NODE = "83";
@@ -54,9 +59,9 @@ public class WorkflowBuilder {
         // 每次从模板字节重新解析，得到独立的对象树，多个请求并发也不会互相污染
         ObjectNode workflow = (ObjectNode) mapper.readTree(template);
 
-        // 79 号 CLIPTextEncode：正向提示词直接写入 text
-        ObjectNode positiveInputs = inputsOf(workflow, POSITIVE_PROMPT_NODE);
-        positiveInputs.put("text", prompt);
+        // 84 号 StringConcatenate：用户 prompt 写入 string_b，string_a 的风格前缀保持不变
+        ObjectNode promptInputs = inputsOf(workflow, PROMPT_NODE);
+        promptInputs.put(PROMPT_INPUT, prompt);
 
         // 模板通过 83 号 ResolutionSelector 按比例算尺寸，这里改成 API 传来的精确像素，
         // 并删掉 83 号节点，避免 ComfyUI 使用近似尺寸。
@@ -83,7 +88,7 @@ public class WorkflowBuilder {
             if (!root.isObject()) {
                 throw new IllegalStateException("ComfyUI 工作流模板不是 JSON 对象: " + resource);
             }
-            for (String nodeId : new String[] {POSITIVE_PROMPT_NODE, LATENT_NODE, SAMPLER_NODE}) {
+            for (String nodeId : new String[] {PROMPT_NODE, LATENT_NODE, SAMPLER_NODE}) {
                 if (!root.path(nodeId).path("inputs").isObject()) {
                     throw new IllegalStateException(
                             "ComfyUI 工作流模板缺少节点 " + nodeId + ": " + resource);
